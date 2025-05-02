@@ -10,7 +10,8 @@ use utils::{
     normalize_scores,
     rank_top_n,
     degree_centrality,
-    bfs_sample_nodes
+    bfs_sample_nodes,
+    betweenness_centrality_sampled
 };
 #[cfg(test)]
 mod test;
@@ -87,57 +88,31 @@ fn closeness_centrality(graph: &UndirectedGraph) -> HashMap<NodeIndex, f64> {
 }
 
 fn main() {
-    // === LOAD GRAPH ===
     let graph = load_graph_from_file("larger-sample.txt");
-    let all_nodes: Vec<NodeIndex> = graph.node_indices().collect();
-    let mut rng = thread_rng();
 
-    // === RANDOM SAMPLING ANALYSIS ===
-    let random_nodes: Vec<NodeIndex> = all_nodes
-    .iter()
-    .choose_multiple(&mut rng, 50.min(all_nodes.len()))
-    .into_iter().cloned()
-    .collect(); 
-
-    let rand_b_scores = utils::betweenness_centrality_sampled(&graph, &random_nodes);
-    let norm_rand_b = normalize_scores(&rand_b_scores);
-    let rand_degrees = degree_centrality(&graph);
-
-    println!("\n=== RANDOM SAMPLE RESULTS ===");
-    println!("Node\tDegree\tBetweenness");
-    for node in &random_nodes {
-        let deg = rand_degrees.get(node).unwrap_or(&0.0);
-        let bet = norm_rand_b.get(node).unwrap_or(&0.0);
-        println!("{}\t{:.3}\t{:.3}", node.index(), deg, bet);
+    // Compute closeness centrality for all nodes
+    let closeness_scores = closeness_centrality(&graph);
+    println!("\nCloseness Centrality (sampled):");
+    for node in graph.node_indices().take(10) {
+        if let Some(score) = closeness_scores.get(&node) {
+            println!("Node {}: {:.6}", node.index(), score);
+        }
     }
 
-    // === BFS SAMPLING COMPARISON ===
-    let bfs_nodes = bfs_sample_nodes(&graph, all_nodes[0], 50);
-    let bfs_b_scores = utils::betweenness_centrality_sampled(&graph, &bfs_nodes);
-    let norm_bfs_b = normalize_scores(&bfs_b_scores);
-    let bfs_degrees = degree_centrality(&graph);
+    // Take the same 10 nodes for sampled betweenness centrality
+    let sample_nodes: Vec<NodeIndex> = graph.node_indices().take(10).collect();
+    let b_scores = betweenness_centrality_sampled(&graph, &sample_nodes);
+    let normalized = normalize_scores(&b_scores);
 
-    println!("\n=== BFS SAMPLE RESULTS ===");
-    println!("Node\tDegree\tBetweenness");
-    for node in &bfs_nodes {
-        let deg = bfs_degrees.get(node).unwrap_or(&0.0);
-        let bet = norm_bfs_b.get(node).unwrap_or(&0.0);
-        println!("{}\t{:.3}\t{:.3}", node.index(), deg, bet);
+    println!("\nNormalized Betweenness Centrality (Sampled):");
+    for (node, score) in &normalized {
+        println!("Node {}: {:.6}", node.index(), score);
     }
 
-    // === TOP GLOBAL CENTRALITY NODES ===
-    let top_rand_nodes = rank_top_n(&norm_rand_b, 5);
-    println!("\nTop 5 Most Central Nodes (Random Sample):");
-    for (node, score) in &top_rand_nodes {
-        println!("Node {:?}: {:.6}", node.index(), score);
+    let mut top: Vec<_> = normalized.iter().collect();
+    top.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+    println!("\nTop 5 Most Central Nodes (by Betweenness):");
+    for (node, score) in top.iter().take(5) {
+        println!("Node {}: {:.6}", node.index(), score);
     }
-
-    // === LOCAL SUBGRAPH ANALYSIS ===
-    let center_node = top_rand_nodes[0].0;
-    let subgraph = extract_neighborhood_subgraph(&graph, center_node, 2);
-    let sub_nodes: Vec<NodeIndex> = subgraph.node_indices().collect();
-    let sub_b = utils::betweenness_centrality_sampled(&subgraph, &sub_nodes);
-    let sub_norm = normalize_scores(&sub_b);
-    let sub_deg = degree_centrality(&subgraph);
-
 }
