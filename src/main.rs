@@ -3,7 +3,8 @@ mod utils;
 use subgraph::extract_neighborhood_subgraph;
 use petgraph::graph::{Graph, NodeIndex};
 use std::collections::{HashMap, HashSet, VecDeque};
-use rand::seq::IteratorRandom;
+use rand::seq::index::sample;
+use rand::Rng;
 use rand::thread_rng;
 use utils::{
     load_graph_from_file,
@@ -89,30 +90,38 @@ fn closeness_centrality(graph: &UndirectedGraph) -> HashMap<NodeIndex, f64> {
 
 fn main() {
     let graph = load_graph_from_file("larger-sample.txt");
+    let all_nodes: Vec<NodeIndex> = graph.node_indices().collect();
 
-    // Compute closeness centrality for all nodes
-    let closeness_scores = closeness_centrality(&graph);
-    println!("\nCloseness Centrality (sampled):");
-    for node in graph.node_indices().take(10) {
-        if let Some(score) = closeness_scores.get(&node) {
+    // Randomly pick a starting node for BFS
+    let mut rng = thread_rng();
+    for i in 1..=5 {
+        println!("\n=== RUN {} ===", i);
+        let start_index = rng.gen_range(0..all_nodes.len());
+        let start_node = all_nodes[start_index];
+        println!("Starting BFS at node: {}", start_node.index());
+
+        let bfs_nodes = bfs_sample_nodes(&graph, start_node, 10);
+
+        let closeness_scores = closeness_centrality(&graph);
+        //println!("\nCloseness Centrality (sampled via BFS):");
+        //for node in &bfs_nodes {
+            //if let Some(score) = closeness_scores.get(node) {
+                //println!("Node {}: {:.6}", node.index(), score);
+            //}
+        //}
+
+        let b_scores = betweenness_centrality_sampled(&graph, &bfs_nodes);
+        let normalized = normalize_scores(&b_scores);
+        //println!("\nNormalized Betweenness Centrality (Sampled via BFS):");
+        //for (node, score) in &normalized {
+            //println!("Node {}: {:.6}", node.index(), score);
+        //}
+
+        let mut top: Vec<_> = normalized.iter().collect();
+        top.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
+        println!("\nTop 5 Most Central Nodes (by Betweenness via BFS):");
+        for (node, score) in top.iter().take(5) {
             println!("Node {}: {:.6}", node.index(), score);
         }
-    }
-
-    // Take the same 10 nodes for sampled betweenness centrality
-    let sample_nodes: Vec<NodeIndex> = graph.node_indices().take(10).collect();
-    let b_scores = betweenness_centrality_sampled(&graph, &sample_nodes);
-    let normalized = normalize_scores(&b_scores);
-
-    println!("\nNormalized Betweenness Centrality (Sampled):");
-    for (node, score) in &normalized {
-        println!("Node {}: {:.6}", node.index(), score);
-    }
-
-    let mut top: Vec<_> = normalized.iter().collect();
-    top.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap());
-    println!("\nTop 5 Most Central Nodes (by Betweenness):");
-    for (node, score) in top.iter().take(5) {
-        println!("Node {}: {:.6}", node.index(), score);
     }
 }
